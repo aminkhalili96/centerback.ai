@@ -13,6 +13,13 @@
     margin-bottom: 32px;
 }
 
+.headerContent {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
 .title {
     font-size: 28px;
     font-weight: 700;
@@ -23,6 +30,69 @@
 .subtitle {
     color: var(--text-secondary);
     font-size: 16px;
+}
+
+.refreshBtn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.refreshBtn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}
+
+.refreshBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorBanner {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    color: var(--warning);
+    font-size: 14px;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 50vh;
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.emptyState {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .controls {

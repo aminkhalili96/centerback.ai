@@ -1,22 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Filter, Search, AlertTriangle, AlertCircle, Info, CheckCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Filter, Search, AlertTriangle, AlertCircle, Info, CheckCircle, RefreshCw } from "lucide-react";
 import Navigation from "@/components/Navigation";
+import { api, Alert } from "@/lib/api";
 import styles from "./page.module.css";
 
-interface Alert {
-    id: string;
-    type: string;
-    severity: "critical" | "high" | "medium" | "low";
-    source_ip: string;
-    destination_ip: string;
-    confidence: number;
-    timestamp: string;
-    status: "active" | "investigating" | "resolved";
-}
-
-const mockAlerts: Alert[] = [
+// Fallback mock data when API is unavailable
+const fallbackAlerts: Alert[] = [
     {
         id: "1",
         type: "DDoS",
@@ -67,16 +58,6 @@ const mockAlerts: Alert[] = [
         timestamp: new Date(Date.now() - 60 * 60000).toISOString(),
         status: "resolved",
     },
-    {
-        id: "6",
-        type: "SSH-Patator",
-        severity: "high",
-        source_ip: "192.168.4.22",
-        destination_ip: "10.0.0.22",
-        confidence: 0.85,
-        timestamp: new Date(Date.now() - 90 * 60000).toISOString(),
-        status: "resolved",
-    },
 ];
 
 const severityIcons = {
@@ -92,10 +73,43 @@ function formatTime(timestamp: string): string {
 }
 
 export default function AlertsPage() {
+    const [alerts, setAlerts] = useState<Alert[]>(fallbackAlerts);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
 
-    const filteredAlerts = mockAlerts.filter((alert) => {
+    const fetchAlerts = useCallback(async () => {
+        try {
+            const response = await api.getAlerts(50);
+            if (response.success && response.data.length > 0) {
+                setAlerts(response.data);
+                setError(null);
+            } else if (!response.success) {
+                setError("Failed to connect to backend. Showing demo data.");
+            }
+        } catch (err) {
+            setError("Failed to connect to backend. Showing demo data.");
+            console.error("API Error:", err);
+        }
+    }, []);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await fetchAlerts();
+        setIsRefreshing(false);
+    };
+
+    useEffect(() => {
+        const init = async () => {
+            await fetchAlerts();
+            setIsLoading(false);
+        };
+        init();
+    }, [fetchAlerts]);
+
+    const filteredAlerts = alerts.filter((alert) => {
         if (filter !== "all" && alert.severity !== filter) return false;
         if (searchQuery && !alert.type.toLowerCase().includes(searchQuery.toLowerCase())) {
             return false;
@@ -103,16 +117,40 @@ export default function AlertsPage() {
         return true;
     });
 
+    if (isLoading) {
+        return (
+            <>
+                <Navigation />
+                <main className={styles.main}>
+                    <div className={styles.loading}>Loading alerts...</div>
+                </main>
+            </>
+        );
+    }
+
     return (
         <>
             <Navigation />
             <main className={styles.main}>
                 <div className={styles.container}>
                     <header className={styles.header}>
-                        <h1 className={styles.title}>Security Alerts</h1>
-                        <p className={styles.subtitle}>
-                            View and manage detected network threats
-                        </p>
+                        <div className={styles.headerContent}>
+                            <div>
+                                <h1 className={styles.title}>Security Alerts</h1>
+                                <p className={styles.subtitle}>
+                                    View and manage detected network threats
+                                </p>
+                            </div>
+                            <button
+                                className={styles.refreshBtn}
+                                onClick={handleRefresh}
+                                disabled={isRefreshing}
+                            >
+                                <RefreshCw size={18} className={isRefreshing ? styles.spinning : ""} />
+                                Refresh
+                            </button>
+                        </div>
+                        {error && <div className={styles.errorBanner}>{error}</div>}
                     </header>
 
                     <div className={styles.controls}>
@@ -154,27 +192,33 @@ export default function AlertsPage() {
                             <span>Time</span>
                         </div>
 
-                        {filteredAlerts.map((alert) => {
-                            const Icon = severityIcons[alert.severity];
-                            return (
-                                <div key={alert.id} className={`${styles.tableRow} ${styles[alert.severity]}`}>
-                                    <span className={styles.typeCell}>
-                                        <Icon size={16} />
-                                        {alert.type}
-                                    </span>
-                                    <span className={`${styles.badge} ${styles[alert.severity]}`}>
-                                        {alert.severity}
-                                    </span>
-                                    <span>{alert.source_ip}</span>
-                                    <span>{alert.destination_ip}</span>
-                                    <span>{Math.round(alert.confidence * 100)}%</span>
-                                    <span className={`${styles.status} ${styles[alert.status]}`}>
-                                        {alert.status}
-                                    </span>
-                                    <span className={styles.time}>{formatTime(alert.timestamp)}</span>
-                                </div>
-                            );
-                        })}
+                        {filteredAlerts.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                No alerts found matching your criteria
+                            </div>
+                        ) : (
+                            filteredAlerts.map((alert) => {
+                                const Icon = severityIcons[alert.severity];
+                                return (
+                                    <div key={alert.id} className={`${styles.tableRow} ${styles[alert.severity]}`}>
+                                        <span className={styles.typeCell}>
+                                            <Icon size={16} />
+                                            {alert.type}
+                                        </span>
+                                        <span className={`${styles.badge} ${styles[alert.severity]}`}>
+                                            {alert.severity}
+                                        </span>
+                                        <span>{alert.source_ip}</span>
+                                        <span>{alert.destination_ip}</span>
+                                        <span>{Math.round(alert.confidence * 100)}%</span>
+                                        <span className={`${styles.status} ${styles[alert.status]}`}>
+                                            {alert.status}
+                                        </span>
+                                        <span className={styles.time}>{formatTime(alert.timestamp)}</span>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             </main>

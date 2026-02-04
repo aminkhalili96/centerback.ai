@@ -3,25 +3,21 @@
 import { useState, useRef } from "react";
 import { Upload, FileText, Play, CheckCircle, AlertTriangle } from "lucide-react";
 import Navigation from "@/components/Navigation";
+import { api, ClassificationResult } from "@/lib/api";
 import styles from "./page.module.css";
-
-interface Result {
-    prediction: string;
-    confidence: number;
-    is_threat: boolean;
-}
 
 interface AnalysisResults {
     total: number;
     benign: number;
     threats: number;
-    results: Result[];
+    results: ClassificationResult[];
 }
 
 export default function AnalyzePage() {
     const [file, setFile] = useState<File | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [results, setResults] = useState<AnalysisResults | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,6 +25,7 @@ export default function AnalyzePage() {
         if (selectedFile && selectedFile.name.endsWith(".csv")) {
             setFile(selectedFile);
             setResults(null);
+            setError(null);
         }
     };
 
@@ -38,6 +35,7 @@ export default function AnalyzePage() {
         if (droppedFile && droppedFile.name.endsWith(".csv")) {
             setFile(droppedFile);
             setResults(null);
+            setError(null);
         }
     };
 
@@ -45,23 +43,43 @@ export default function AnalyzePage() {
         if (!file) return;
 
         setIsAnalyzing(true);
+        setError(null);
 
-        // Simulate API call - in production, call /api/classify/batch
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+            const response = await api.classifyBatch(file);
 
-        // Mock results
-        setResults({
-            total: 150,
-            benign: 135,
-            threats: 15,
-            results: [
-                { prediction: "BENIGN", confidence: 0.98, is_threat: false },
-                { prediction: "DDoS", confidence: 0.95, is_threat: true },
-                { prediction: "BENIGN", confidence: 0.99, is_threat: false },
-                { prediction: "PortScan", confidence: 0.87, is_threat: true },
-                { prediction: "DoS Hulk", confidence: 0.92, is_threat: true },
-            ],
-        });
+            if (response.success) {
+                setResults(response.data);
+            } else {
+                setError(response.error || "Analysis failed");
+                // Fallback to demo results
+                setResults({
+                    total: 150,
+                    benign: 135,
+                    threats: 15,
+                    results: [
+                        { prediction: "BENIGN", confidence: 0.98, is_threat: false },
+                        { prediction: "DDoS", confidence: 0.95, is_threat: true },
+                        { prediction: "BENIGN", confidence: 0.99, is_threat: false },
+                        { prediction: "PortScan", confidence: 0.87, is_threat: true },
+                        { prediction: "DoS Hulk", confidence: 0.92, is_threat: true },
+                    ],
+                });
+            }
+        } catch (err) {
+            setError("Failed to connect to backend. Showing demo results.");
+            // Fallback to demo
+            setResults({
+                total: 150,
+                benign: 135,
+                threats: 15,
+                results: [
+                    { prediction: "BENIGN", confidence: 0.98, is_threat: false },
+                    { prediction: "DDoS", confidence: 0.95, is_threat: true },
+                    { prediction: "PortScan", confidence: 0.87, is_threat: true },
+                ],
+            });
+        }
 
         setIsAnalyzing(false);
     };
@@ -69,9 +87,10 @@ export default function AnalyzePage() {
     const handleSampleAnalysis = async () => {
         setIsAnalyzing(true);
         setFile(null);
+        setError(null);
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // Demo analysis with sample data
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         setResults({
             total: 100,
@@ -126,6 +145,10 @@ export default function AnalyzePage() {
                                 </p>
                             </div>
 
+                            {error && (
+                                <div className={styles.errorBanner}>{error}</div>
+                            )}
+
                             <div className={styles.actions}>
                                 <button
                                     className={`${styles.btn} ${styles.btnPrimary}`}
@@ -168,7 +191,7 @@ export default function AnalyzePage() {
 
                                 <div className={styles.resultsList}>
                                     <h3 className={styles.resultsListTitle}>Sample Predictions</h3>
-                                    {results.results.map((result, index) => (
+                                    {results.results.slice(0, 10).map((result, index) => (
                                         <div
                                             key={index}
                                             className={`${styles.resultItem} ${result.is_threat ? styles.threat : styles.safe
