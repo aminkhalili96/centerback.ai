@@ -1,0 +1,24 @@
+.chart {
+    width: 100%;
+    height: 300px;
+}
+
+.chartContainer {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+}
+
+.chartHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.chartTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}

@@ -1,0 +1,234 @@
+.main {
+    min-height: calc(100vh - 64px);
+    padding: 32px 0;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.header {
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.uploadSection {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+}
+
+.dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px;
+    border: 2px dashed var(--border-light);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.dropzone:hover {
+    border-color: var(--accent-primary);
+    background: rgba(218, 119, 86, 0.05);
+}
+
+.fileInput {
+    display: none;
+}
+
+.uploadIcon {
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.dropzoneTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.dropzoneText {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btnPrimary {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.btnPrimary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.btnSecondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btnSecondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+
+.resultsSection {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+}
+
+.resultsTitle {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 24px;
+}
+
+.statsRow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.statBox {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+}
+
+.statValue {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.statLabel {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.statBox.success .statValue {
+    color: var(--success);
+}
+
+.statBox.danger .statValue {
+    color: var(--danger);
+}
+
+.resultsList {
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+}
+
+.resultsListTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+.resultItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+}
+
+.resultIcon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+}
+
+.resultItem.threat .resultIcon {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--danger);
+}
+
+.resultItem.safe .resultIcon {
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--success);
+}
+
+.resultPrediction {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.resultConfidence {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+@media (max-width: 640px) {
+    .statsRow {
+        grid-template-columns: 1fr;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+}
