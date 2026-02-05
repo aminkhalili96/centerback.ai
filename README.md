@@ -5,6 +5,8 @@
 
 CenterBack.AI is your network's last line of defense by using machine learning to detect and classify network intrusions in real-time.
 
+![Dashboard Screenshot](assets/dashboard.png)
+
 ## Features
 
 - **Multi-class Classification**: Detects 14 different attack types

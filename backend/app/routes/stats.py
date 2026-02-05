@@ -37,3 +37,12 @@ async def get_attack_distribution():
         "data": distribution,
         "message": "Attack distribution retrieved",
     }
+
+
+@router.get("/stats/distribution")
+async def get_distribution():
+    """
+    Alias for attack distribution (frontend compatibility).
+    """
+    distribution = stats_service.get_attack_distribution()
+    return distribution  # Return array directly for frontend

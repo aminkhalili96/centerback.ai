@@ -110,7 +110,22 @@ class ApiClient {
 
     // Get recent alerts
     async getAlerts(limit: number = 50): Promise<ApiResponse<Alert[]>> {
-        return this.request(`/api/alerts?limit=${limit}`);
+        try {
+            const response = await fetch(`${this.baseUrl}/api/alerts?limit=${limit}`, {
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const json = await response.json();
+
+            if (!response.ok) {
+                return { success: false, data: [], error: json.detail || 'Failed to fetch alerts' };
+            }
+
+            // Handle nested response: {data: {alerts: [...], total: N}}
+            const alerts = json.data?.alerts || json.alerts || [];
+            return { success: true, data: alerts };
+        } catch (error) {
+            return { success: false, data: [], error: error instanceof Error ? error.message : 'Network error' };
+        }
     }
 
     // Get attack distribution
