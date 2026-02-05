@@ -1,11 +1,16 @@
-"""
-Classifier Service - ML Model Inference
-"""
+"""Classifier service - ML model inference."""
+
+from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any
+import random
 from pathlib import Path
+from typing import Any, Dict, List
+
 import numpy as np
+import pandas as pd
+
+from ml.inference import inference
 
 logger = logging.getLogger(__name__)
 
@@ -28,97 +33,116 @@ ATTACK_LABELS = [
     "Web Attack - XSS",
 ]
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+SAMPLE_DATA_PATH = BACKEND_DIR / "data" / "sample_data.csv"
+
 
 class ClassifierService:
     """Service for network traffic classification."""
-    
-    def __init__(self):
-        """Initialize the classifier service."""
-        self.model = None
-        self.model_path = Path("ml/models/random_forest_v1.joblib")
-        self._load_model()
-    
-    def _load_model(self) -> None:
-        """Load the trained model."""
-        try:
-            if self.model_path.exists():
-                import joblib
-                self.model = joblib.load(self.model_path)
-                logger.info(f"Model loaded from {self.model_path}")
-            else:
-                logger.warning(f"Model not found at {self.model_path}. Using mock predictions.")
-                self.model = None
-        except Exception as e:
-            logger.error(f"Error loading model: {e}")
-            self.model = None
-    
+
+    def __init__(self) -> None:
+        self._inference = inference
+        if not self._inference.is_loaded():
+            self._inference.load_model()
+
     def predict_single(self, features: List[float]) -> Dict[str, Any]:
         """
         Predict class for a single network flow.
-        
+
         Args:
             features: List of 78 float features
-            
+
         Returns:
             Dictionary with prediction, confidence, and threat status
         """
-        if self.model is None:
-            # Mock prediction for demo when model not trained yet
-            return self._mock_prediction()
-        
-        features_array = np.array(features).reshape(1, -1)
-        prediction = self.model.predict(features_array)[0]
-        probabilities = self.model.predict_proba(features_array)[0]
-        confidence = float(np.max(probabilities))
-        
-        return {
-            "prediction": prediction,
-            "confidence": round(confidence, 4),
-            "is_threat": prediction != "BENIGN",
-        }
-    
-    def predict_batch(self, df) -> Dict[str, Any]:
+        if self._inference.is_loaded() or self._inference.load_model():
+            result = self._inference.predict(np.asarray(features, dtype=float))
+            if "error" not in result:
+                return {
+                    "prediction": result["prediction"],
+                    "confidence": round(float(result["confidence"]), 4),
+                    "is_threat": bool(result["is_threat"]),
+                }
+
+        return self._mock_prediction()
+
+    def predict_batch(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
         Predict classes for multiple network flows.
-        
+
         Args:
-            df: DataFrame with features
-            
+            df: DataFrame with flow features
+
         Returns:
             Dictionary with results summary and individual predictions
         """
-        results = []
+        if df is None or df.empty:
+            return {"total": 0, "benign": 0, "threats": 0, "results": []}
+
+        df = df.copy()
+        df.columns = df.columns.astype(str).str.strip()
+
+        if self._inference.is_loaded() or self._inference.load_model():
+            batch_results = self._inference.predict_batch(df)
+            if batch_results and isinstance(batch_results, list) and "error" not in batch_results[0]:
+                benign_count = sum(1 for r in batch_results if not r["is_threat"])
+                threat_count = len(batch_results) - benign_count
+                return {
+                    "total": len(batch_results),
+                    "benign": benign_count,
+                    "threats": threat_count,
+                    "results": batch_results[:100],
+                }
+
+            logger.warning("Falling back to mock predictions for batch classification.")
+
+        # Fallback for demo when model is unavailable
         benign_count = 0
         threat_count = 0
-        
-        # Get feature columns (exclude label if present)
-        feature_cols = [col for col in df.columns if col.lower() != 'label']
-        
-        for idx, row in df.iterrows():
-            features = row[feature_cols[:78]].tolist()
-            result = self.predict_single(features)
-            results.append(result)
-            
+        results: List[Dict[str, Any]] = []
+        for idx in range(len(df)):
+            result = self._mock_prediction()
+            if idx < 100:
+                results.append(result)
             if result["is_threat"]:
                 threat_count += 1
             else:
                 benign_count += 1
-        
+
         return {
-            "total": len(results),
+            "total": len(df),
             "benign": benign_count,
             "threats": threat_count,
-            "results": results[:100],  # Limit to first 100 for response size
+            "results": results,
         }
-    
+
     def predict_sample(self) -> Dict[str, Any]:
         """
         Predict on sample data for demo.
-        
+
         Returns:
             Sample predictions
         """
-        # Mock sample results for demo
+        if SAMPLE_DATA_PATH.exists() and (self._inference.is_loaded() or self._inference.load_model()):
+            try:
+                sample_df = pd.read_csv(SAMPLE_DATA_PATH, nrows=25)
+                sample_df.columns = sample_df.columns.astype(str).str.strip()
+                if "Label" in sample_df.columns:
+                    sample_df = sample_df.drop(columns=["Label"])
+
+                batch_results = self._inference.predict_batch(sample_df)
+                if batch_results and isinstance(batch_results, list) and "error" not in batch_results[0]:
+                    benign_count = sum(1 for r in batch_results if not r["is_threat"])
+                    threat_count = len(batch_results) - benign_count
+                    return {
+                        "total": len(batch_results),
+                        "benign": benign_count,
+                        "threats": threat_count,
+                        "results": batch_results,
+                    }
+            except Exception:
+                logger.exception("Failed to generate sample predictions from sample_data.csv")
+
         sample_results = [
             {"prediction": "BENIGN", "confidence": 0.98, "is_threat": False},
             {"prediction": "DDoS", "confidence": 0.95, "is_threat": True},
@@ -126,24 +150,14 @@ class ClassifierService:
             {"prediction": "BENIGN", "confidence": 0.99, "is_threat": False},
             {"prediction": "DoS Hulk", "confidence": 0.92, "is_threat": True},
         ]
-        
-        return {
-            "total": 5,
-            "benign": 2,
-            "threats": 3,
-            "results": sample_results,
-        }
-    
+
+        return {"total": 5, "benign": 2, "threats": 3, "results": sample_results}
+
     def _mock_prediction(self) -> Dict[str, Any]:
         """Generate mock prediction when model not available."""
-        import random
-        
         is_threat = random.random() > 0.7
-        if is_threat:
-            prediction = random.choice(ATTACK_LABELS[1:])  # Exclude BENIGN
-        else:
-            prediction = "BENIGN"
-        
+        prediction = random.choice(ATTACK_LABELS[1:]) if is_threat else "BENIGN"
+
         return {
             "prediction": prediction,
             "confidence": round(random.uniform(0.85, 0.99), 4),

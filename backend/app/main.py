@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.routes import health, classify, stats, alerts
+from app.routes import health, classify, stats, alerts, model, dataset
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -44,8 +44,8 @@ app.add_middleware(
         "http://localhost:3002",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-        "https://*.vercel.app",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,6 +56,8 @@ app.include_router(health.router, tags=["Health"])
 app.include_router(classify.router, prefix="/api", tags=["Classification"])
 app.include_router(stats.router, prefix="/api", tags=["Statistics"])
 app.include_router(alerts.router, prefix="/api", tags=["Alerts"])
+app.include_router(model.router, prefix="/api", tags=["Model"])
+app.include_router(dataset.router, prefix="/api", tags=["Dataset"])
 
 
 @app.get("/")

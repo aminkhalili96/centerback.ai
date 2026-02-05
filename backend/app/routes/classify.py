@@ -1,20 +1,23 @@
 """Classification endpoints."""
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List
 import pandas as pd
 import io
 
 from app.services.classifier import ClassifierService
+from app.services.session_store import session_store
 
 router = APIRouter()
 classifier = ClassifierService()
 
+MAX_CSV_BYTES = 25 * 1024 * 1024  # 25MB
+
 
 class FlowFeatures(BaseModel):
     """Single network flow features for classification."""
-    features: List[float]
+    features: List[float] = Field(min_length=78, max_length=78)
 
 
 class ClassificationResult(BaseModel):
@@ -40,13 +43,14 @@ async def classify_single(flow: FlowFeatures):
     Expects 78 features as input.
     Returns prediction with confidence score.
     """
-    if len(flow.features) != 78:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Expected 78 features, got {len(flow.features)}"
-        )
-    
     result = classifier.predict_single(flow.features)
+    
+    # Track in session
+    session_store.add_classification(
+        prediction=result["prediction"],
+        is_threat=result["is_threat"],
+        confidence=result["confidence"],
+    )
     
     return {
         "success": True,
@@ -70,20 +74,36 @@ async def classify_batch(file: UploadFile = File(...)):
         )
     
     try:
-        contents = await file.read()
-        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        contents = await file.read(MAX_CSV_BYTES + 1)
+        if len(contents) > MAX_CSV_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"CSV file too large (max {MAX_CSV_BYTES // (1024 * 1024)}MB)",
+            )
+
+        df = pd.read_csv(io.BytesIO(contents))
+        df.columns = df.columns.astype(str).str.strip()
         
         results = classifier.predict_batch(df)
+        
+        # Track in session
+        session_store.add_batch_classification(results.get("results", []))
         
         return {
             "success": True,
             "data": results,
             "message": f"Classified {results['total']} flows",
         }
+    except HTTPException:
+        raise
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    except pd.errors.ParserError:
+        raise HTTPException(status_code=400, detail="Invalid CSV format")
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing file: {str(e)}"
+            detail="Error processing file"
         )
 
 
@@ -95,6 +115,9 @@ async def classify_sample():
     Useful for demo purposes.
     """
     results = classifier.predict_sample()
+    
+    # Track in session
+    session_store.add_batch_classification(results.get("results", []))
     
     return {
         "success": True,

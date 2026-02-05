@@ -1,22 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Activity, Shield, AlertTriangle, Target, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Activity, Shield, AlertTriangle, Target, RefreshCw, Database, Play } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import StatCard from "@/components/StatCard";
 import AlertList from "@/components/AlertList";
 import { AttackDistributionChart, TrafficTimelineChart } from "@/components/Charts";
-import { api, DashboardStats, Alert, AttackDistribution } from "@/lib/api";
+import { api, Alert, AttackDistribution, SessionStats } from "@/lib/api";
 import styles from "./page.module.css";
-
-// Fallback mock data when API is unavailable
-const fallbackStats: DashboardStats = {
-  total_flows: 0,
-  threats_detected: 0,
-  benign_flows: 0,
-  critical_alerts: 0,
-  model_accuracy: 82.87,
-};
 
 const fallbackTrafficData = Array.from({ length: 24 }, (_, i) => ({
   time: `${String(i).padStart(2, "0")}:00`,
@@ -27,35 +19,28 @@ const fallbackTrafficData = Array.from({ length: 24 }, (_, i) => ({
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<DashboardStats>(fallbackStats);
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [attackDistribution, setAttackDistribution] = useState<AttackDistribution[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      // Fetch all data in parallel
-      const [statsRes, alertsRes, distributionRes] = await Promise.all([
-        api.getStats(),
+      const [sessionRes, alertsRes] = await Promise.all([
+        api.getSessionStats(),
         api.getAlerts(10),
-        api.getAttackDistribution(),
       ]);
 
-      if (statsRes.success) {
-        setStats(statsRes.data);
+      if (sessionRes.success) {
+        setSessionStats(sessionRes.data);
       }
 
       if (alertsRes.success) {
         setAlerts(alertsRes.data);
       }
 
-      if (distributionRes.success) {
-        setAttackDistribution(distributionRes.data);
-      }
-
       setError(null);
     } catch (err) {
-      setError("Failed to connect to backend. Using demo data.");
+      setError("Failed to connect to backend.");
       console.error("API Error:", err);
     }
   }, []);
@@ -89,6 +74,41 @@ export default function Dashboard() {
     );
   }
 
+  const hasData = sessionStats?.has_data ?? false;
+
+  // Empty state - no analysis run yet
+  if (!hasData) {
+    return (
+      <>
+        <Navigation />
+        <main className={styles.main}>
+          <div className={styles.container}>
+            <div className={styles.emptyState}>
+              <Database size={64} className={styles.emptyIcon} />
+              <h1>No Data Analyzed Yet</h1>
+              <p>
+                Run an analysis on the sample dataset to see real results here.
+              </p>
+              <Link href="/dataset" className={styles.ctaButton}>
+                <Play size={20} />
+                Explore Dataset
+              </Link>
+              <p className={styles.modelNote}>
+                Model Accuracy: {sessionStats?.model_accuracy ?? 82.87}%
+              </p>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // Build attack distribution from session stats
+  const attackDistribution: AttackDistribution[] = sessionStats?.attack_distribution ?? [];
+
+  // TypeScript guard - after hasData check, sessionStats is guaranteed to exist
+  if (!sessionStats) return null;
+
   return (
     <>
       <Navigation />
@@ -99,7 +119,7 @@ export default function Dashboard() {
               <div>
                 <h1 className={styles.title}>Network Security Dashboard</h1>
                 <p className={styles.subtitle}>
-                  Real-time network traffic analysis and threat detection
+                  Results from your analysis session
                 </p>
               </div>
               <button
@@ -118,27 +138,25 @@ export default function Dashboard() {
           <section className={styles.statsGrid}>
             <StatCard
               title="Total Flows Analyzed"
-              value={stats.total_flows.toLocaleString()}
+              value={sessionStats.total_flows.toLocaleString()}
               icon={<Activity size={20} />}
-              trend={{ value: 12, isPositive: true }}
               variant="accent"
             />
             <StatCard
               title="Threats Detected"
-              value={stats.threats_detected}
+              value={sessionStats.threats_detected}
               icon={<AlertTriangle size={20} />}
-              trend={{ value: 3, isPositive: false }}
               variant="danger"
             />
             <StatCard
               title="Critical Alerts"
-              value={stats.critical_alerts}
+              value={sessionStats.critical_alerts}
               icon={<Shield size={20} />}
               variant="warning"
             />
             <StatCard
               title="Model Accuracy"
-              value={`${stats.model_accuracy}%`}
+              value={`${sessionStats.model_accuracy ?? 82.87}%`}
               icon={<Target size={20} />}
               variant="success"
             />
@@ -154,7 +172,7 @@ export default function Dashboard() {
               <h3 className={styles.chartTitle}>Attack Distribution</h3>
               <AttackDistributionChart
                 data={attackDistribution.length > 0 ? attackDistribution : [
-                  { type: "No Data", count: 1 }
+                  { type: "No Threats", count: 1 }
                 ]}
               />
             </div>
@@ -164,8 +182,18 @@ export default function Dashboard() {
           <section className={styles.alertsSection}>
             <AlertList alerts={alerts} maxItems={5} />
           </section>
+
+          {/* Session Info */}
+          <section className={styles.sessionInfo}>
+            <p>
+              Session started: {sessionStats.started_at ? new Date(sessionStats.started_at).toLocaleString() : 'N/A'}
+              {' | '}
+              <Link href="/dataset">Analyze more data</Link>
+            </p>
+          </section>
         </div>
       </main>
     </>
   );
 }
+

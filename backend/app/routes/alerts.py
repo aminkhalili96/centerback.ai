@@ -1,6 +1,6 @@
 """Alerts endpoints."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from app.services.alerts_service import AlertsService
 
@@ -38,6 +38,8 @@ async def get_alert_detail(alert_id: str):
     Get detailed information about a specific alert.
     """
     alert = alerts_service.get_alert_by_id(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
     
     return {
         "success": True,

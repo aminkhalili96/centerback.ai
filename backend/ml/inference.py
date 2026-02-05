@@ -4,6 +4,7 @@ Loads trained model and provides prediction methods
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import numpy as np
@@ -12,8 +13,16 @@ import joblib
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path(__file__).parent / 'models'
-MODEL_PATH = MODEL_DIR / 'random_forest_v1.joblib'
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+MODEL_DIR = Path(__file__).resolve().parent / "models"
+DEFAULT_MODEL_PATH = MODEL_DIR / "random_forest_v1.joblib"
+
+_env_model_path = os.environ.get("MODEL_PATH")
+if _env_model_path:
+    env_path = Path(_env_model_path)
+    MODEL_PATH = env_path if env_path.is_absolute() else (BACKEND_DIR / env_path)
+else:
+    MODEL_PATH = DEFAULT_MODEL_PATH
 
 
 class MLInference:

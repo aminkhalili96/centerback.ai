@@ -66,7 +66,7 @@ export default function AnalyzePage() {
                     ],
                 });
             }
-        } catch (err) {
+        } catch {
             setError("Failed to connect to backend. Showing demo results.");
             // Fallback to demo
             setResults({

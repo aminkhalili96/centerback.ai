@@ -11,6 +11,12 @@ interface ApiResponse<T> {
     error?: string;
 }
 
+interface BackendEnvelope<T> {
+    success: boolean;
+    data: T;
+    message?: string;
+}
+
 interface ClassificationResult {
     prediction: string;
     confidence: number;
@@ -30,6 +36,8 @@ interface DashboardStats {
     benign_flows: number;
     critical_alerts: number;
     model_accuracy: number;
+    model_loaded?: boolean;
+    last_updated?: string;
 }
 
 interface Alert {
@@ -46,13 +54,25 @@ interface Alert {
 interface AttackDistribution {
     type: string;
     count: number;
+    percentage?: number;
 }
 
 interface ModelInfo {
     loaded: boolean;
     accuracy: number;
+    accuracy_pct?: number | null;
     n_features: number;
     classes: string[];
+}
+
+interface AlertsApiData {
+    alerts: Alert[];
+    total: number;
+}
+
+interface AttackDistributionApiData {
+    distribution: AttackDistribution[];
+    total_threats: number;
 }
 
 class ApiClient {
@@ -80,14 +100,19 @@ class ApiClient {
             if (!response.ok) {
                 return {
                     success: false,
-                    data: data,
-                    error: data.detail || 'Request failed',
+                    data: data as T,
+                    error: data.detail || data.message || 'Request failed',
                 };
+            }
+
+            if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+                const envelope = data as BackendEnvelope<T>;
+                return { success: true, data: envelope.data };
             }
 
             return {
                 success: true,
-                data: data.data || data,
+                data: data as T,
             };
         } catch (error) {
             return {
@@ -99,7 +124,7 @@ class ApiClient {
     }
 
     // Health check
-    async healthCheck(): Promise<ApiResponse<{ status: string; message: string }>> {
+    async healthCheck(): Promise<ApiResponse<{ status: string; service: string }>> {
         return this.request('/health');
     }
 
@@ -110,31 +135,24 @@ class ApiClient {
 
     // Get recent alerts
     async getAlerts(limit: number = 50): Promise<ApiResponse<Alert[]>> {
-        try {
-            const response = await fetch(`${this.baseUrl}/api/alerts?limit=${limit}`, {
-                headers: { 'Content-Type': 'application/json' },
-            });
-            const json = await response.json();
-
-            if (!response.ok) {
-                return { success: false, data: [], error: json.detail || 'Failed to fetch alerts' };
-            }
-
-            // Handle nested response: {data: {alerts: [...], total: N}}
-            const alerts = json.data?.alerts || json.alerts || [];
-            return { success: true, data: alerts };
-        } catch (error) {
-            return { success: false, data: [], error: error instanceof Error ? error.message : 'Network error' };
+        const res = await this.request<AlertsApiData>(`/api/alerts?limit=${limit}`);
+        if (!res.success) {
+            return { success: false, data: [], error: res.error };
         }
+        return { success: true, data: res.data.alerts };
     }
 
     // Get attack distribution
     async getAttackDistribution(): Promise<ApiResponse<AttackDistribution[]>> {
-        return this.request('/api/stats/distribution');
+        const res = await this.request<AttackDistributionApiData>('/api/stats/attacks');
+        if (!res.success) {
+            return { success: false, data: [], error: res.error };
+        }
+        return { success: true, data: res.data.distribution };
     }
 
     // Single flow classification
-    async classifyFlow(features: Record<string, number>): Promise<ApiResponse<ClassificationResult>> {
+    async classifyFlow(features: number[]): Promise<ApiResponse<ClassificationResult>> {
         return this.request('/api/classify', {
             method: 'POST',
             body: JSON.stringify({ features }),
@@ -179,6 +197,60 @@ class ApiClient {
     async getModelInfo(): Promise<ApiResponse<ModelInfo>> {
         return this.request('/api/model/info');
     }
+
+    // Get dataset info
+    async getDatasetInfo(): Promise<ApiResponse<DatasetInfo>> {
+        return this.request('/api/dataset/info');
+    }
+
+    // Get dataset preview
+    async getDatasetPreview(rows: number = 20): Promise<ApiResponse<DatasetPreview>> {
+        return this.request(`/api/dataset/preview?rows=${rows}`);
+    }
+
+    // Classify sample dataset
+    async classifySample(): Promise<ApiResponse<BatchClassificationResult>> {
+        return this.request('/api/classify/sample', { method: 'POST' });
+    }
+
+    // Get session stats
+    async getSessionStats(): Promise<ApiResponse<SessionStats>> {
+        return this.request('/api/stats/session');
+    }
+
+    // Reset session stats
+    async resetSessionStats(): Promise<ApiResponse<null>> {
+        return this.request('/api/stats/session/reset', { method: 'POST' });
+    }
+}
+
+// Additional types for dataset
+interface DatasetInfo {
+    name: string;
+    description: string;
+    rows: number;
+    features: number;
+    attack_types: { name: string; description: string }[];
+    file_exists: boolean;
+}
+
+interface DatasetPreview {
+    columns: string[];
+    rows: (string | number)[][];
+    total_rows: number;
+    preview_rows: number;
+}
+
+interface SessionStats {
+    has_data: boolean;
+    total_flows: number;
+    threats_detected: number;
+    benign_flows: number;
+    critical_alerts: number;
+    attack_distribution: AttackDistribution[];
+    model_accuracy: number | null;
+    started_at: string | null;
+    last_updated: string | null;
 }
 
 // Export singleton instance
@@ -193,4 +265,7 @@ export type {
     Alert,
     AttackDistribution,
     ModelInfo,
+    DatasetInfo,
+    DatasetPreview,
+    SessionStats,
 };

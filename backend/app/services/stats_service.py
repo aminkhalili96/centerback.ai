@@ -1,19 +1,22 @@
-"""
-Stats Service - Dashboard Statistics
-"""
+"""Stats service - dashboard statistics."""
 
-from typing import Dict, Any, List
+from __future__ import annotations
+
+from typing import Any, Dict, List
 from datetime import datetime, timedelta
 import random
+
+from ml.inference import inference
 
 
 class StatsService:
     """Service for dashboard statistics."""
     
-    def __init__(self):
-        """Initialize stats service."""
-        # In production, this would query the database
-        pass
+    def __init__(self) -> None:
+        # In production, this would query the database.
+        self._inference = inference
+        if not self._inference.is_loaded():
+            self._inference.load_model()
     
     def get_dashboard_stats(self) -> Dict[str, Any]:
         """
@@ -22,12 +25,23 @@ class StatsService:
         Returns:
             Dictionary with stats for dashboard cards
         """
-        # Mock data for development - replace with database queries
+        # Mock data for development - replace with database queries.
+        model_accuracy_pct: float = 0.0
+        if self._inference.is_loaded():
+            if self._inference.accuracy is not None:
+                model_accuracy_pct = round(float(self._inference.accuracy) * 100, 2)
+
+        total_flows = 12847
+        threats_detected = 26
+        benign_flows = max(total_flows - threats_detected, 0)
+
         return {
-            "total_flows": 12847,
-            "threats_detected": 26,
+            "total_flows": total_flows,
+            "threats_detected": threats_detected,
+            "benign_flows": benign_flows,
             "critical_alerts": 3,
-            "model_accuracy": 99.2,
+            "model_accuracy": model_accuracy_pct,
+            "model_loaded": self._inference.is_loaded(),
             "last_updated": datetime.utcnow().isoformat(),
         }
     

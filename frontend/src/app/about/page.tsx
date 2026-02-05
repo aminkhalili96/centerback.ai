@@ -6,7 +6,7 @@ const features = [
     {
         icon: Brain,
         title: "Machine Learning",
-        description: "Random Forest classifier trained on CICIDS2017 dataset with 99%+ accuracy",
+        description: "Random Forest classifier trained on CICIDS2017-shaped data (demo model)",
     },
     {
         icon: Zap,
@@ -62,7 +62,7 @@ export default function AboutPage() {
                             CenterBack.AI is an intelligent network security system that uses machine
                             learning to detect and classify network intrusions in real-time. Built with
                             a Random Forest classifier trained on the CICIDS2017 dataset, it can identify
-                            14 different types of network attacks with over 99% accuracy.
+                            14 different types of network attacks (accuracy depends on training data).
                         </p>
                     </section>
 

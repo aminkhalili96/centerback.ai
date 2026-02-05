@@ -1,0 +1,335 @@
+.container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.header {
+    margin-bottom: 2rem;
+}
+
+.headerContent {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.headerContent svg {
+    color: var(--accent-primary);
+}
+
+.headerContent h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.headerContent p {
+    margin: 0.25rem 0 0;
+    color: var(--text-secondary);
+}
+
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    gap: 1rem;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorBanner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: #ef4444;
+    margin-bottom: 2rem;
+}
+
+/* Stats Grid */
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.statCard {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.statCard svg {
+    color: var(--accent-primary);
+}
+
+.statValue {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.statLabel {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Description Section */
+.descriptionSection {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.descriptionSection h2 {
+    margin: 0 0 1rem;
+    font-size: 1.25rem;
+}
+
+.descriptionSection h3 {
+    margin: 1.5rem 0 1rem;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.descriptionSection p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.attackGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+
+.attackCard {
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.attackName {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--accent-primary);
+}
+
+.attackDesc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Preview Section */
+.previewSection {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.previewHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.previewHeader h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.previewMeta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.tableWrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+}
+
+.dataTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.dataTable th,
+.dataTable td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dataTable th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-secondary);
+    position: sticky;
+    top: 0;
+}
+
+.dataTable tr:hover td {
+    background: var(--bg-tertiary);
+}
+
+.dataTable tr:last-child td {
+    border-bottom: none;
+}
+
+/* Action Section */
+.actionSection {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.downloadButton,
+.analyzeButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.downloadButton {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+}
+
+.downloadButton:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    border-color: var(--accent-primary);
+}
+
+.analyzeButton {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.analyzeButton:hover:not(:disabled) {
+    background: var(--accent-secondary);
+    transform: translateY(-2px);
+}
+
+.downloadButton:disabled,
+.analyzeButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Results Section */
+.resultsSection {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1));
+    border: 1px solid var(--accent-primary);
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.resultsSection h2 {
+    margin: 0 0 1.5rem;
+    color: var(--accent-primary);
+}
+
+.resultsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.resultCard {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.resultValue {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.resultLabel {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.resultCard.benign .resultValue {
+    color: #10b981;
+}
+
+.resultCard.threat .resultValue {
+    color: #ef4444;
+}
+
+.viewDashboardHint {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.viewDashboardHint a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+
+    .statsGrid,
+    .resultsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .actionSection {
+        flex-direction: column;
+    }
+
+    .attackGrid {
+        grid-template-columns: 1fr;
+    }
+}

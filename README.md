@@ -13,7 +13,7 @@ CenterBack.AI is your network's last line of defense by using machine learning t
 - **Real-time Analysis**: Fast inference via REST API
 - **Interactive Dashboard**: Visualize threats with Apache ECharts
 - **CSV Upload**: Batch analyze network flow data
-- **High Accuracy**: 99%+ accuracy with Random Forest
+- **Model Accuracy**: Demo model reports ~82.87% accuracy on synthetic CICIDS2017-shaped data (train locally to enable real inference)
 
 ## Tech Stack
 
@@ -40,9 +40,14 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Download and prepare dataset (first time only)
-python ml/download_data.py
+# Train a model (first time only)
+# Option A (quick demo): generate synthetic sample data
+python ml/generate_sample.py
 python ml/train.py
+#
+# Option B: download full CICIDS2017 dataset (manual/Kaggle), then train
+# python ml/download_data.py
+# python ml/train.py
 
 # Run server
 uvicorn app.main:app --reload
@@ -68,9 +73,13 @@ npm run dev
 | ------ | ----------------------- | -------------------- |
 | GET    | `/health`             | Health check         |
 | GET    | `/api/stats`          | Dashboard statistics |
+| GET    | `/api/stats/attacks`  | Attack distribution  |
 | GET    | `/api/alerts`         | Recent detections    |
+| GET    | `/api/alerts/{id}`    | Alert detail         |
 | POST   | `/api/classify`       | Classify single flow |
 | POST   | `/api/classify/batch` | Classify CSV file    |
+| POST   | `/api/classify/sample`| Classify demo sample |
+| GET    | `/api/model/info`     | Model metadata       |
 
 ## Attack Types Detected
 
@@ -97,6 +106,7 @@ centerback.ai/
 ├── backend/           # Python FastAPI backend
 ├── frontend/          # Next.js frontend
 ├── CLAUDE.md          # AI context file
+├── Codex.md           # AI context file (Codex)
 ├── RULES.md           # Coding standards
 ├── TASK.md            # Progress tracker
 ├── ROADMAP.md         # Future plans
@@ -109,8 +119,12 @@ Copy `.env.example` to `.env` and fill in:
 
 ```env
 # Backend
+# Optional (not wired yet in MVP)
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+
+# Optional: override model artifact path (defaults to backend/ml/models/random_forest_v1.joblib)
+MODEL_PATH=ml/models/random_forest_v1.joblib
 
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:8000

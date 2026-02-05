@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Search, Bell, Info, Shield } from "lucide-react";
+import { LayoutDashboard, Search, Bell, Info, Shield, Database } from "lucide-react";
 import styles from "./Navigation.module.css";
 
 const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dataset", label: "Dataset", icon: Database },
     { href: "/analyze", label: "Analyze", icon: Search },
     { href: "/alerts", label: "Alerts", icon: Bell },
     { href: "/about", label: "About", icon: Info },
