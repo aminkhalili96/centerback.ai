@@ -3,7 +3,18 @@
  * Handles all communication with the FastAPI backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+function normalizeApiBaseUrl(value: string | undefined): string {
+    if (!value) {
+        return '';
+    }
+    return value.replace(/\/+$/, '');
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL);
+
+export function getApiBaseUrl(): string {
+    return API_BASE_URL;
+}
 
 interface ApiResponse<T> {
     success: boolean;
@@ -15,6 +26,7 @@ interface BackendEnvelope<T> {
     success: boolean;
     data: T;
     message?: string;
+    error?: string;
 }
 
 interface ClassificationResult {
@@ -82,6 +94,17 @@ class ApiClient {
         this.baseUrl = baseUrl;
     }
 
+    private getAuthHeaders(): Record<string, string> {
+        let token = '';
+        if (typeof window !== 'undefined') {
+            token = window.localStorage.getItem('centerback_token') || '';
+        }
+        if (!token) {
+            token = process.env.NEXT_PUBLIC_API_TOKEN || '';
+        }
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
     private async request<T>(
         endpoint: string,
         options: RequestInit = {}
@@ -91,22 +114,42 @@ class ApiClient {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
+                    ...this.getAuthHeaders(),
                     ...options.headers,
                 },
             });
 
             const data = await response.json();
 
+            const extractError = (payload: unknown): string => {
+                if (!payload || typeof payload !== 'object') return 'Request failed';
+                const p = payload as Record<string, unknown>;
+                const detail = p.detail;
+                if (typeof detail === 'string') return detail;
+                const error = p.error;
+                if (typeof error === 'string') return error;
+                const message = p.message;
+                if (typeof message === 'string') return message;
+                return 'Request failed';
+            };
+
             if (!response.ok) {
                 return {
                     success: false,
                     data: data as T,
-                    error: data.detail || data.message || 'Request failed',
+                    error: extractError(data),
                 };
             }
 
             if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
                 const envelope = data as BackendEnvelope<T>;
+                if (!envelope.success) {
+                    return {
+                        success: false,
+                        data: envelope.data as T,
+                        error: envelope.error || envelope.message || 'Request failed',
+                    };
+                }
                 return { success: true, data: envelope.data };
             }
 
@@ -167,6 +210,9 @@ class ApiClient {
         try {
             const response = await fetch(`${this.baseUrl}/api/classify/batch`, {
                 method: 'POST',
+                headers: {
+                    ...this.getAuthHeaders(),
+                },
                 body: formData,
             });
 
@@ -176,8 +222,20 @@ class ApiClient {
                 return {
                     success: false,
                     data: data,
-                    error: data.detail || 'Classification failed',
+                    error: data.detail || data.error || data.message || 'Classification failed',
                 };
+            }
+
+            if (data && typeof data === 'object' && 'success' in data && 'data' in data) {
+                const envelope = data as BackendEnvelope<BatchClassificationResult>;
+                if (!envelope.success) {
+                    return {
+                        success: false,
+                        data: envelope.data as BatchClassificationResult,
+                        error: envelope.error || envelope.message || 'Classification failed',
+                    };
+                }
+                return { success: true, data: envelope.data };
             }
 
             return {

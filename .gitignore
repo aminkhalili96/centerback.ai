@@ -71,6 +71,8 @@ yarn-error.log*
 *.hdf5
 data/raw/
 data/processed/
+backend/data/*.db
+backend/data/*.sqlite
 
 # Trained models (use Git LFS or external storage)
 *.joblib

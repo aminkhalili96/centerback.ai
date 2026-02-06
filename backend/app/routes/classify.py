@@ -1,16 +1,24 @@
 """Classification endpoints."""
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
+import logging
 import pandas as pd
 import io
 
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.dependencies.auth import get_current_user, require_roles
+from app.models.entities import User, UserRole
+from app.services.audit_service import audit_service
 from app.services.classifier import ClassifierService
-from app.services.session_store import session_store
+from app.services.detection_service import detection_service
 
 router = APIRouter()
 classifier = ClassifierService()
+logger = logging.getLogger(__name__)
 
 MAX_CSV_BYTES = 25 * 1024 * 1024  # 25MB
 
@@ -18,6 +26,8 @@ MAX_CSV_BYTES = 25 * 1024 * 1024  # 25MB
 class FlowFeatures(BaseModel):
     """Single network flow features for classification."""
     features: List[float] = Field(min_length=78, max_length=78)
+    source_ip: str = "unknown"
+    destination_ip: str = "unknown"
 
 
 class ClassificationResult(BaseModel):
@@ -35,32 +45,66 @@ class BatchClassificationResult(BaseModel):
     results: List[ClassificationResult]
 
 
-@router.post("/classify", response_model=dict)
-async def classify_single(flow: FlowFeatures):
+@router.post("/classify", response_model=dict, dependencies=[Depends(require_roles(UserRole.analyst.value, UserRole.admin.value))])
+async def classify_single(
+    flow: FlowFeatures,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
     """
     Classify a single network flow.
     
     Expects 78 features as input.
     Returns prediction with confidence score.
     """
-    result = classifier.predict_single(flow.features)
-    
-    # Track in session
-    session_store.add_classification(
+    try:
+        result = classifier.predict_single(flow.features)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    event, alert = detection_service.record_classification(
+        db=db,
         prediction=result["prediction"],
-        is_threat=result["is_threat"],
-        confidence=result["confidence"],
+        confidence=float(result["confidence"]),
+        is_threat=bool(result["is_threat"]),
+        source="api.classify_single",
+        source_ip=flow.source_ip,
+        destination_ip=flow.destination_ip,
+        features=flow.features,
+        model_version=result.get("model_version"),
     )
+
+    audit_service.log(
+        db=db,
+        action="classify.single",
+        target_type="classification_event",
+        target_id=event.id,
+        actor=current_user,
+        details={
+            "is_threat": event.is_threat,
+            "prediction": event.prediction,
+            "alert_id": alert.id if alert else None,
+        },
+    )
+    db.commit()
     
     return {
         "success": True,
-        "data": result,
+        "data": {
+            **result,
+            "event_id": event.id,
+            "alert_id": alert.id if alert else None,
+        },
         "message": "Classification complete",
     }
 
 
-@router.post("/classify/batch", response_model=dict)
-async def classify_batch(file: UploadFile = File(...)):
+@router.post("/classify/batch", response_model=dict, dependencies=[Depends(require_roles(UserRole.analyst.value, UserRole.admin.value))])
+async def classify_batch(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
     """
     Classify multiple network flows from CSV file.
     
@@ -84,15 +128,41 @@ async def classify_batch(file: UploadFile = File(...)):
         df = pd.read_csv(io.BytesIO(contents))
         df.columns = df.columns.astype(str).str.strip()
         
-        results = classifier.predict_batch(df)
-        
-        # Track in session
-        session_store.add_batch_classification(results.get("results", []))
+        try:
+            summary, all_results = classifier.predict_batch(df)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        stored_events = 0
+        for row in all_results:
+            detection_service.record_classification(
+                db=db,
+                prediction=str(row["prediction"]),
+                confidence=float(row["confidence"]),
+                is_threat=bool(row["is_threat"]),
+                source="api.classify_batch",
+                source_ip="unknown",
+                destination_ip="unknown",
+                features=None,
+                model_version=row.get("model_version"),
+                extra_metadata={"file_name": file.filename},
+            )
+            stored_events += 1
+
+        audit_service.log(
+            db=db,
+            action="classify.batch",
+            target_type="classification_batch",
+            target_id=None,
+            actor=current_user,
+            details={"file_name": file.filename, "rows": stored_events},
+        )
+        db.commit()
         
         return {
             "success": True,
-            "data": results,
-            "message": f"Classified {results['total']} flows",
+            "data": summary,
+            "message": f"Classified {summary['total']} flows",
         }
     except HTTPException:
         raise
@@ -100,24 +170,51 @@ async def classify_batch(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="CSV file is empty")
     except pd.errors.ParserError:
         raise HTTPException(status_code=400, detail="Invalid CSV format")
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Error processing CSV file", exc_info=exc)
         raise HTTPException(
             status_code=500,
             detail="Error processing file"
-        )
+        ) from exc
 
 
 @router.post("/classify/sample", response_model=dict)
-async def classify_sample():
+async def classify_sample(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
     """
     Classify sample data from pre-loaded CICIDS2017 dataset.
     
     Useful for demo purposes.
     """
-    results = classifier.predict_sample()
-    
-    # Track in session
-    session_store.add_batch_classification(results.get("results", []))
+    try:
+        results = classifier.predict_sample()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    for row in results.get("results", []):
+        detection_service.record_classification(
+            db=db,
+            prediction=str(row["prediction"]),
+            confidence=float(row["confidence"]),
+            is_threat=bool(row["is_threat"]),
+            source="api.classify_sample",
+            source_ip="sample",
+            destination_ip="sample",
+            features=None,
+            model_version=row.get("model_version"),
+        )
+
+    audit_service.log(
+        db=db,
+        action="classify.sample",
+        target_type="classification_batch",
+        target_id=None,
+        actor=current_user,
+        details={"rows": results.get("total", 0)},
+    )
+    db.commit()
     
     return {
         "success": True,

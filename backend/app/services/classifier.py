@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 
+from app.config import settings
 from ml.inference import inference
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,13 @@ class ClassifierService:
                     "prediction": result["prediction"],
                     "confidence": round(float(result["confidence"]), 4),
                     "is_threat": bool(result["is_threat"]),
+                    "model_version": self._inference.get_model_version(),
                 }
+        if settings.enable_demo_fallback:
+            return self._mock_prediction()
+        raise RuntimeError("Model unavailable for classification")
 
-        return self._mock_prediction()
-
-    def predict_batch(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def predict_batch(self, df: pd.DataFrame) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Predict classes for multiple network flows.
 
@@ -74,10 +77,13 @@ class ClassifierService:
             df: DataFrame with flow features
 
         Returns:
-            Dictionary with results summary and individual predictions
+            (summary, full_results) where:
+              - summary contains a preview list (first 100) for API responses
+              - full_results contains all per-row results for session tracking
         """
         if df is None or df.empty:
-            return {"total": 0, "benign": 0, "threats": 0, "results": []}
+            empty = {"total": 0, "benign": 0, "threats": 0, "results": []}
+            return empty, []
 
         df = df.copy()
         df.columns = df.columns.astype(str).str.strip()
@@ -85,36 +91,51 @@ class ClassifierService:
         if self._inference.is_loaded() or self._inference.load_model():
             batch_results = self._inference.predict_batch(df)
             if batch_results and isinstance(batch_results, list) and "error" not in batch_results[0]:
+                model_version = self._inference.get_model_version()
+                enriched_results = [
+                    {
+                        **item,
+                        "model_version": model_version,
+                    }
+                    for item in batch_results
+                ]
                 benign_count = sum(1 for r in batch_results if not r["is_threat"])
                 threat_count = len(batch_results) - benign_count
-                return {
-                    "total": len(batch_results),
+                summary = {
+                    "total": len(enriched_results),
                     "benign": benign_count,
                     "threats": threat_count,
-                    "results": batch_results[:100],
+                    "results": enriched_results[:100],
                 }
+                return summary, enriched_results
 
-            logger.warning("Falling back to mock predictions for batch classification.")
+            logger.warning("Model predict_batch returned invalid payload.")
 
-        # Fallback for demo when model is unavailable
+        if not settings.enable_demo_fallback:
+            raise RuntimeError("Model unavailable for batch classification")
+
+        # Fallback for demo mode when explicitly enabled
         benign_count = 0
         threat_count = 0
-        results: List[Dict[str, Any]] = []
+        preview_results: List[Dict[str, Any]] = []
+        all_results: List[Dict[str, Any]] = []
         for idx in range(len(df)):
             result = self._mock_prediction()
+            all_results.append(result)
             if idx < 100:
-                results.append(result)
+                preview_results.append(result)
             if result["is_threat"]:
                 threat_count += 1
             else:
                 benign_count += 1
 
-        return {
+        summary = {
             "total": len(df),
             "benign": benign_count,
             "threats": threat_count,
-            "results": results,
+            "results": preview_results,
         }
+        return summary, all_results
 
     def predict_sample(self) -> Dict[str, Any]:
         """
@@ -132,23 +153,34 @@ class ClassifierService:
 
                 batch_results = self._inference.predict_batch(sample_df)
                 if batch_results and isinstance(batch_results, list) and "error" not in batch_results[0]:
+                    model_version = self._inference.get_model_version()
+                    enriched_results = [
+                        {
+                            **item,
+                            "model_version": model_version,
+                        }
+                        for item in batch_results
+                    ]
                     benign_count = sum(1 for r in batch_results if not r["is_threat"])
                     threat_count = len(batch_results) - benign_count
                     return {
-                        "total": len(batch_results),
+                        "total": len(enriched_results),
                         "benign": benign_count,
                         "threats": threat_count,
-                        "results": batch_results,
+                        "results": enriched_results,
                     }
             except Exception:
                 logger.exception("Failed to generate sample predictions from sample_data.csv")
 
+        if not settings.enable_demo_fallback:
+            raise RuntimeError("Sample classification unavailable: model or sample data missing")
+
         sample_results = [
-            {"prediction": "BENIGN", "confidence": 0.98, "is_threat": False},
-            {"prediction": "DDoS", "confidence": 0.95, "is_threat": True},
-            {"prediction": "PortScan", "confidence": 0.87, "is_threat": True},
-            {"prediction": "BENIGN", "confidence": 0.99, "is_threat": False},
-            {"prediction": "DoS Hulk", "confidence": 0.92, "is_threat": True},
+            {"prediction": "BENIGN", "confidence": 0.98, "is_threat": False, "model_version": "demo"},
+            {"prediction": "DDoS", "confidence": 0.95, "is_threat": True, "model_version": "demo"},
+            {"prediction": "PortScan", "confidence": 0.87, "is_threat": True, "model_version": "demo"},
+            {"prediction": "BENIGN", "confidence": 0.99, "is_threat": False, "model_version": "demo"},
+            {"prediction": "DoS Hulk", "confidence": 0.92, "is_threat": True, "model_version": "demo"},
         ]
 
         return {"total": 5, "benign": 2, "threats": 3, "results": sample_results}
@@ -162,4 +194,5 @@ class ClassifierService:
             "prediction": prediction,
             "confidence": round(random.uniform(0.85, 0.99), 4),
             "is_threat": is_threat,
+            "model_version": "demo",
         }

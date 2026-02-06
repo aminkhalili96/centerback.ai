@@ -1,9 +1,8 @@
 """Dataset endpoints - explore and download sample data."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 import pandas as pd
-import os
 from pathlib import Path
 
 router = APIRouter()
@@ -68,11 +67,10 @@ async def get_dataset_preview(rows: int = 20):
     Get first N rows of dataset for preview table.
     """
     if not SAMPLE_DATA_PATH.exists():
-        return {
-            "success": False,
-            "data": None,
-            "error": "Sample data file not found. Run 'python ml/generate_sample.py' first.",
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Sample data file not found. Run 'python ml/generate_sample.py' first.",
+        )
     
     try:
         df = pd.read_csv(SAMPLE_DATA_PATH, nrows=min(rows, 100))
@@ -100,12 +98,8 @@ async def get_dataset_preview(rows: int = 20):
             },
             "message": "Dataset preview retrieved",
         }
-    except Exception as e:
-        return {
-            "success": False,
-            "data": None,
-            "error": str(e),
-        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to load dataset preview") from exc
 
 
 @router.get("/dataset/download")
@@ -114,10 +108,10 @@ async def download_dataset():
     Download the sample dataset CSV file.
     """
     if not SAMPLE_DATA_PATH.exists():
-        return {
-            "success": False,
-            "error": "Sample data file not found.",
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Sample data file not found. Run 'python ml/generate_sample.py' first.",
+        )
     
     return FileResponse(
         path=SAMPLE_DATA_PATH,

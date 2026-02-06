@@ -2,91 +2,107 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
 from datetime import datetime, timedelta
-import random
+from typing import Any
 
+from sqlalchemy import and_, func, select
+from sqlalchemy.orm import Session
+
+from app.models.entities import IngestionMessage, QueueStatus
+from app.services.detection_service import detection_service
 from ml.inference import inference
 
 
 class StatsService:
-    """Service for dashboard statistics."""
-    
+    """Service for dashboard and distribution statistics."""
+
     def __init__(self) -> None:
-        # In production, this would query the database.
         self._inference = inference
         if not self._inference.is_loaded():
             self._inference.load_model()
-    
-    def get_dashboard_stats(self) -> Dict[str, Any]:
-        """
-        Get main dashboard statistics.
-        
-        Returns:
-            Dictionary with stats for dashboard cards
-        """
-        # Mock data for development - replace with database queries.
-        model_accuracy_pct: float = 0.0
-        if self._inference.is_loaded():
-            if self._inference.accuracy is not None:
-                model_accuracy_pct = round(float(self._inference.accuracy) * 100, 2)
 
-        total_flows = 12847
-        threats_detected = 26
-        benign_flows = max(total_flows - threats_detected, 0)
+    def get_dashboard_stats(self, db: Session) -> dict[str, Any]:
+        stats = detection_service.dashboard_stats(db)
+        model_accuracy_pct = None
+        if self._inference.is_loaded() and self._inference.accuracy is not None:
+            model_accuracy_pct = round(float(self._inference.accuracy) * 100, 2)
+
+        queue_depth = db.scalar(
+            select(func.count(IngestionMessage.id)).where(
+                IngestionMessage.status.in_(
+                    [QueueStatus.queued.value, QueueStatus.processing.value, QueueStatus.failed.value]
+                )
+            )
+        ) or 0
+        oldest_queued = db.scalar(
+            select(func.min(IngestionMessage.created_at)).where(
+                and_(
+                    IngestionMessage.status.in_([QueueStatus.queued.value, QueueStatus.failed.value]),
+                    IngestionMessage.created_at.is_not(None),
+                )
+            )
+        )
+        queue_lag_seconds = None
+        if oldest_queued is not None:
+            queue_lag_seconds = max(int((datetime.utcnow() - oldest_queued).total_seconds()), 0)
 
         return {
-            "total_flows": total_flows,
-            "threats_detected": threats_detected,
-            "benign_flows": benign_flows,
-            "critical_alerts": 3,
+            "total_flows": stats["total_flows"],
+            "threats_detected": stats["threats_detected"],
+            "benign_flows": stats["benign_flows"],
+            "critical_alerts": stats["critical_alerts"],
             "model_accuracy": model_accuracy_pct,
             "model_loaded": self._inference.is_loaded(),
-            "last_updated": datetime.utcnow().isoformat(),
+            "ingestion_queue_depth": int(queue_depth),
+            "ingestion_queue_lag_seconds": queue_lag_seconds,
+            "last_updated": stats["last_updated"] or datetime.utcnow().isoformat(),
         }
-    
-    def get_attack_distribution(self) -> Dict[str, Any]:
-        """
-        Get distribution of attack types.
-        
-        Returns:
-            Dictionary with attack type counts and percentages
-        """
-        # Mock data for development
-        distribution = [
-            {"type": "DDoS", "count": 45, "percentage": 40.2},
-            {"type": "PortScan", "count": 32, "percentage": 28.6},
-            {"type": "DoS Hulk", "count": 15, "percentage": 13.4},
-            {"type": "Bot", "count": 10, "percentage": 8.9},
-            {"type": "Web Attack", "count": 8, "percentage": 7.1},
-            {"type": "Other", "count": 2, "percentage": 1.8},
-        ]
-        
+
+    def get_session_stats(self, db: Session) -> dict[str, Any]:
+        dashboard = self.get_dashboard_stats(db)
+        distribution = detection_service.attack_distribution(db)
+
         return {
-            "distribution": distribution,
-            "total_threats": 112,
+            "has_data": dashboard["total_flows"] > 0,
+            "total_flows": dashboard["total_flows"],
+            "threats_detected": dashboard["threats_detected"],
+            "benign_flows": dashboard["benign_flows"],
+            "critical_alerts": dashboard["critical_alerts"],
+            "attack_distribution": distribution["distribution"],
+            "model_accuracy": dashboard["model_accuracy"],
+            "started_at": None,
+            "last_updated": dashboard["last_updated"],
         }
-    
-    def get_traffic_timeline(self, hours: int = 24) -> List[Dict[str, Any]]:
+
+    def get_attack_distribution(self, db: Session) -> dict[str, Any]:
+        return detection_service.attack_distribution(db)
+
+    def get_traffic_timeline(self, db: Session, hours: int = 24) -> list[dict[str, Any]]:
+        """Simple derived timeline for charting.
+
+        This currently provides a deterministic placeholder based on current totals.
         """
-        Get traffic analysis timeline.
-        
-        Args:
-            hours: Number of hours to include
-            
-        Returns:
-            List of hourly traffic data points
-        """
-        timeline = []
+        stats = detection_service.dashboard_stats(db)
+        if hours <= 0:
+            return []
+
+        avg_total = max(int(stats["total_flows"] / hours), 1)
+        avg_threats = int(stats["threats_detected"] / hours)
         now = datetime.utcnow()
-        
+        timeline: list[dict[str, Any]] = []
         for i in range(hours):
-            timestamp = now - timedelta(hours=hours - i - 1)
-            timeline.append({
-                "timestamp": timestamp.isoformat(),
-                "total": random.randint(400, 600),
-                "benign": random.randint(380, 580),
-                "threats": random.randint(0, 20),
-            })
-        
+            ts = now - timedelta(hours=hours - i - 1)
+            threats = max(avg_threats, 0)
+            total = max(avg_total, threats)
+            timeline.append(
+                {
+                    "timestamp": ts.isoformat(),
+                    "total": total,
+                    "benign": max(total - threats, 0),
+                    "threats": threats,
+                }
+            )
         return timeline
+
+
+stats_service = StatsService()

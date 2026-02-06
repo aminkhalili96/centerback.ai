@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Database, Download, Play, FileText, AlertTriangle, Loader2 } from 'lucide-react';
 import styles from './page.module.css';
-import { api } from '@/lib/api';
+import { api, getApiBaseUrl } from '@/lib/api';
 
 interface DatasetInfo {
     name: string;
@@ -37,6 +37,7 @@ export default function DatasetPage() {
     async function loadDatasetInfo() {
         try {
             setLoading(true);
+            setError(null);
             const [infoRes, previewRes] = await Promise.all([
                 api.getDatasetInfo(),
                 api.getDatasetPreview(20),
@@ -44,8 +45,12 @@ export default function DatasetPage() {
 
             if (infoRes.success) setInfo(infoRes.data);
             if (previewRes.success) setPreview(previewRes.data);
-            if (!infoRes.success) setError(infoRes.error || 'Failed to load dataset info');
-        } catch (err) {
+            if (!infoRes.success) {
+                setError(infoRes.error || 'Failed to load dataset info');
+            } else if (!previewRes.success) {
+                setError(previewRes.error || 'Failed to load dataset preview');
+            }
+        } catch {
             setError('Failed to connect to backend');
         } finally {
             setLoading(false);
@@ -64,7 +69,7 @@ export default function DatasetPage() {
             } else {
                 setError(result.error || 'Analysis failed');
             }
-        } catch (err) {
+        } catch {
             setError('Analysis failed');
         } finally {
             setAnalyzing(false);
@@ -72,7 +77,8 @@ export default function DatasetPage() {
     }
 
     function downloadDataset() {
-        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dataset/download`, '_blank');
+        const baseUrl = getApiBaseUrl();
+        window.open(`${baseUrl}/api/dataset/download`, '_blank');
     }
 
     if (loading) {

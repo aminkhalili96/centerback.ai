@@ -45,22 +45,28 @@ class MLInference:
         self.label_encoder = None
         self.feature_names = None
         self.accuracy = None
+        self.model_path = str(MODEL_PATH)
         self._initialized = True
         
-    def load_model(self) -> bool:
+    def load_model(self, model_path: Optional[str] = None) -> bool:
         """Load the trained model from disk."""
-        if not MODEL_PATH.exists():
-            logger.error(f"Model not found at {MODEL_PATH}")
+        target_path = Path(model_path) if model_path else Path(self.model_path)
+        if not target_path.is_absolute():
+            target_path = BACKEND_DIR / target_path
+
+        if not target_path.exists():
+            logger.error(f"Model not found at {target_path}")
             logger.info("Run 'python ml/train.py' to train the model first")
             return False
         
         try:
-            logger.info(f"Loading model from {MODEL_PATH}...")
-            data = joblib.load(MODEL_PATH)
+            logger.info(f"Loading model from {target_path}...")
+            data = joblib.load(target_path)
             self.model = data['model']
             self.label_encoder = data['label_encoder']
             self.feature_names = data['feature_names']
             self.accuracy = data['accuracy']
+            self.model_path = str(target_path)
             logger.info(f"Model loaded successfully (accuracy: {self.accuracy:.2%})")
             return True
         except Exception as e:
@@ -160,7 +166,13 @@ class MLInference:
             "accuracy": self.accuracy,
             "n_features": len(self.feature_names) if self.feature_names else 0,
             "classes": list(self.label_encoder.classes_) if self.label_encoder else [],
+            "model_path": self.model_path,
+            "model_version": self.get_model_version(),
         }
+
+    def get_model_version(self) -> str:
+        """Return model artifact version label."""
+        return Path(self.model_path).stem
 
 
 # Global instance

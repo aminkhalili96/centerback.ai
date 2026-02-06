@@ -1,22 +1,24 @@
 """Statistics endpoints."""
 
-from fastapi import APIRouter
-from app.services.stats_service import StatsService
-from app.services.session_store import session_store
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.dependencies.auth import get_current_user, require_roles
+from app.models.entities import Alert, ClassificationEvent, IngestionMessage, User, UserRole
+from app.services.audit_service import audit_service
+from app.services.stats_service import stats_service
 
 router = APIRouter()
-stats_service = StatsService()
 
 
-@router.get("/stats")
-async def get_stats():
-    """
-    Get dashboard statistics.
-    
-    Returns total flows analyzed, threat counts, accuracy, etc.
-    """
-    stats = stats_service.get_dashboard_stats()
-    
+@router.get("/stats", dependencies=[Depends(require_roles(UserRole.viewer.value, UserRole.analyst.value, UserRole.admin.value))])
+async def get_stats(db: Session = Depends(get_db)):
+    """Get dashboard statistics."""
+    stats = stats_service.get_dashboard_stats(db)
     return {
         "success": True,
         "data": stats,
@@ -24,22 +26,10 @@ async def get_stats():
     }
 
 
-@router.get("/stats/session")
-async def get_session_stats():
-    """
-    Get session-based statistics from user's analysis runs.
-    
-    Returns accumulated stats from classifications during this session.
-    """
-    stats = session_store.get_stats()
-    
-    # Include model accuracy from inference
-    from ml.inference import inference
-    if inference.is_loaded() and inference.accuracy is not None:
-        stats["model_accuracy"] = round(float(inference.accuracy) * 100, 2)
-    else:
-        stats["model_accuracy"] = None
-    
+@router.get("/stats/session", dependencies=[Depends(require_roles(UserRole.viewer.value, UserRole.analyst.value, UserRole.admin.value))])
+async def get_session_stats(db: Session = Depends(get_db)):
+    """Get aggregate statistics used by dashboard session view."""
+    stats = stats_service.get_session_stats(db)
     return {
         "success": True,
         "data": stats,
@@ -47,13 +37,24 @@ async def get_session_stats():
     }
 
 
-@router.post("/stats/session/reset")
-async def reset_session_stats():
-    """
-    Reset session statistics.
-    """
-    session_store.reset()
-    
+@router.post("/stats/session/reset", dependencies=[Depends(require_roles(UserRole.admin.value))])
+async def reset_session_stats(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    """Reset detection data (admin-only)."""
+    db.execute(delete(Alert))
+    db.execute(delete(ClassificationEvent))
+    db.execute(delete(IngestionMessage))
+    audit_service.log(
+        db=db,
+        action="stats.reset",
+        target_type="dataset",
+        target_id=None,
+        actor=current_user,
+        details={"scope": "all_detection_data"},
+    )
+    db.commit()
     return {
         "success": True,
         "data": None,
@@ -61,15 +62,10 @@ async def reset_session_stats():
     }
 
 
-@router.get("/stats/attacks")
-async def get_attack_distribution():
-    """
-    Get attack type distribution.
-    
-    Returns breakdown by attack category.
-    """
-    distribution = stats_service.get_attack_distribution()
-    
+@router.get("/stats/attacks", dependencies=[Depends(require_roles(UserRole.viewer.value, UserRole.analyst.value, UserRole.admin.value))])
+async def get_attack_distribution(db: Session = Depends(get_db)):
+    """Get attack type distribution."""
+    distribution = stats_service.get_attack_distribution(db)
     return {
         "success": True,
         "data": distribution,
@@ -77,12 +73,10 @@ async def get_attack_distribution():
     }
 
 
-@router.get("/stats/distribution")
-async def get_distribution():
-    """
-    Alias for attack distribution (deprecated).
-    """
-    distribution = stats_service.get_attack_distribution()
+@router.get("/stats/distribution", dependencies=[Depends(require_roles(UserRole.viewer.value, UserRole.analyst.value, UserRole.admin.value))])
+async def get_distribution(db: Session = Depends(get_db)):
+    """Alias for attack distribution (deprecated)."""
+    distribution = stats_service.get_attack_distribution(db)
     return {
         "success": True,
         "data": distribution,
